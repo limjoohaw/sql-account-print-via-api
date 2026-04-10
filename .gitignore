@@ -21,6 +21,9 @@ logs/
 *.swp
 *.swo
 
+# Claude Code
+CLAUDE.md
+
 # NiceGUI local storage
 .nicegui/
 
