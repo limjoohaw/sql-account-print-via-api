@@ -1,0 +1,9 @@
+{
+  "sales_quotation":  {"label": "Sales Quotation", "resource": "salesquotation",      "report_type": "Sales Quotation",       "filename": "SQ_{docno}.pdf"},
+  "sales_order":      {"label": "Sales Order",     "resource": "salesorder",          "report_type": "Sales Order",           "filename": "SO_{docno}.pdf"},
+  "delivery_order":   {"label": "Delivery Order",  "resource": "deliveryorder",       "report_type": "Sales Delivery Order",  "filename": "DO_{docno}.pdf"},
+  "sales_invoice":    {"label": "Sales Invoice",   "resource": "salesinvoice",        "report_type": "Sales Invoice",         "filename": "IV_{docno}.pdf"},
+  "cash_sale":        {"label": "Cash Sale",       "resource": "cashsales",           "report_type": "Sales Cash Sales",      "filename": "CS_{docno}.pdf"},
+  "credit_note":      {"label": "Credit Note",     "resource": "customercreditnote",  "report_type": "Sales Credit Note",     "filename": "CN_{docno}.pdf"},
+  "debit_note":       {"label": "Debit Note",      "resource": "customerdebitnote",   "report_type": "Sales Debit Note",      "filename": "DN_{docno}.pdf"}
+}

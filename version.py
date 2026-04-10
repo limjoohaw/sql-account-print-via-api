@@ -1,0 +1,3 @@
+APP_NAME = "SQL Account Print"
+APP_VERSION = "1.0.0"
+APP_BUILD_NUMBER = 1

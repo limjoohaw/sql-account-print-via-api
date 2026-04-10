@@ -1,0 +1,8 @@
+[
+  {
+    "username": "admin",
+    "password_hash": "$2b$12$REPLACE_WITH_BCRYPT_HASH",
+    "companies": ["company_a"],
+    "is_admin": true
+  }
+]

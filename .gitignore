@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment & secrets
+.env
+companies.json
+users.json
+
+# Logs
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# NiceGUI local storage
+.nicegui/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Reference materials (large, not needed in repo)
+reference/

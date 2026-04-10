@@ -1,0 +1,10 @@
+[
+  {
+    "id": "company_a",
+    "name": "Company A Sdn Bhd",
+    "api_host": "company-a.public-host.com",
+    "access_key": "YOUR_ACCESS_KEY",
+    "secret_key": "YOUR_SECRET_KEY",
+    "templates": {}
+  }
+]
