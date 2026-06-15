@@ -46,18 +46,27 @@ You will receive:
 
 ---
 
-## Part A — Store the credentials in SQL Account
+## Part A — Create the Live Document Check setting in SQL Account
 
-The report reads the Company ID and secret from your **Company Profile** fields, so the same
-report template works for every company without editing the script:
+The report reads the Company ID and signing secret from a dedicated **Quotation** record,
+so one setting serves **every** report format in that SQL Account — no need to edit the
+script per company.
 
-| Put this value | Into this Company Profile field |
-|---|---|
-| **Company ID** | **Fax 1** |
-| **Signing secret** | **Fax 2** |
+1. Go to **Sales → Quotation → New**.
+2. Create a quotation with these exact values:
+   | Field | Value |
+   |---|---|
+   | **Doc No** | `GOLINKLiveDocCheck` (exact, case-sensitive) |
+   | **Company Name** (customer name) | your **Company ID** (from GOLINK) |
+   | **Validity** | your **Signing Secret** (from GOLINK) |
+3. **Save** the quotation.
 
-> ⚠️ Once used here, **Fax 1 / Fax 2 should not also be used for real fax numbers**. If you
-> need those fields, ask GOLINK about using alternative profile fields instead.
+> ⚠️ Do **not** delete or edit this `GOLINKLiveDocCheck` quotation later — every QR depends
+> on it. Changing the Company Name or Validity will break verification for documents
+> already printed.
+
+> The signing secret sits in this quotation's Validity field — visible to your internal
+> SQL Account users (who already own the data), but never exposed to customers.
 
 ---
 
@@ -78,17 +87,30 @@ adapt your own layout.
 `HMAC-SHA256` block (see [Appendix](#appendix--full-report-script)) **before**
 `procedure Setup;`. Keep the `//<-----HMAC-SHA256 begin/end----->` markers.
 
-**2. Add a QR barcode object.**
+**2. Load the setting in `procedure Setup;`.** Inside `procedure Setup;`, add the query
+that reads the Company ID + secret from the `GOLINKLiveDocCheck` quotation into a dataset:
+
+```pascal
+  SQL := 'SELECT CompanyName As CompanyID, Validity As SigningSecret FROM SL_QT ' +
+         'WHERE DocNo=''GOLINKLiveDocCheck'' ';
+  AddDataSet('plLiveDocCheck', ['CompanyID', 'SigningSecret'])
+  .GetDBData(SQL);
+```
+
+The QR builder (added **after** `procedure Setup;` — see Appendix) then reads
+`<plLiveDocCheck."CompanyID">` and `<plLiveDocCheck."SigningSecret">`.
+
+**3. Add a QR barcode object.**
 - Insert a **Barcode** object, set its symbology to **QR Code** (2D).
 - Rename the object to **`BarcodeHMACSHA256`**.
 - Make it large enough with error-correction level **M** (the URL is ~200 characters; a
   too-small QR won't scan reliably).
 
-**3. (Optional) Add a text object** named **`MmHMACSHA256`** to display the raw URL — handy
+**4. (Optional) Add a text object** named **`MmHMACSHA256`** to display the raw URL — handy
 for testing. *In production you can hide it. If you delete the object, also delete the
 `MmHMACSHA256.Text := url;` line, or the script will error.*
 
-**4. Set the document type.** In the builder procedure, set `docTypeKey` to match this
+**5. Set the document type.** In the builder procedure, set `docTypeKey` to match this
 report's document type. Valid keys:
 
 ```
@@ -96,7 +118,10 @@ sales_quotation, sales_order, delivery_order, sales_invoice,
 cash_sale, credit_note, debit_note
 ```
 
-**5. Wire the event.** ⚠️ *Most-forgotten step:* connect `BarcodeHMACSHA256OnBeforePrint`
+**6. Add the QR builder** (the `BarcodeHMACSHA256OnBeforePrint` procedure — see Appendix)
+**after** `procedure Setup;`.
+
+**7. Wire the event.** ⚠️ *Most-forgotten step:* connect `BarcodeHMACSHA256OnBeforePrint`
 to the **`BarcodeHMACSHA256`** object's **OnBeforePrint** event (Object Inspector → Events).
 Without this, the script never runs.
 
@@ -120,7 +145,7 @@ the name SQL Account uses to identify the format.)
 | The live PDF opens | ✅ Working |
 | "This document has been cancelled in system" | Document is cancelled in SQL Account |
 | "Document not found" | No such document number at that company |
-| "Invalid or expired link" | Signature/Company ID/secret mismatch — recheck Fax1/Fax2 |
+| "Invalid or expired link" | Signature/Company ID/secret mismatch — recheck the `GOLINKLiveDocCheck` quotation's Company Name / Validity |
 | "Unable to display document" | Format name not found in SQL Account, or API issue |
 
 > **IDOR check:** change the document number in the URL to another invoice → it must show
@@ -144,9 +169,12 @@ customers**:
 - **Regenerating the signing secret** — invalidates **every** QR ever printed for that
   company → **"Invalid or expired link"**. Only regenerate if the secret is exposed.
 - **Changing the Company ID** — same effect: all previously printed QRs break.
+- **Editing or deleting the `GOLINKLiveDocCheck` quotation** — the report reads the Company
+  ID and secret from it at print time, so changing its Company Name / Validity (or removing
+  it) breaks new and existing QRs.
 
-In short: **Company ID, secret, and report format name must stay stable** for as long as
-printed documents need to remain verifiable.
+In short: **the `GOLINKLiveDocCheck` quotation (Company ID + secret) and the report format
+name must stay stable** for as long as printed documents need to remain verifiable.
 
 ---
 
@@ -154,11 +182,12 @@ printed documents need to remain verifiable.
 
 | Symptom | Likely cause / fix |
 |---|---|
-| "Invalid or expired link" | Fax1 (Company ID) or Fax2 (secret) wrong/blank; or the format name changed after printing. Verify Fax1/Fax2 match what GOLINK issued. |
+| "Invalid or expired link" | Company ID or secret wrong/blank in the `GOLINKLiveDocCheck` quotation; or the format name changed after printing. Verify Company Name / Validity match what GOLINK issued. |
 | "Unable to display document" | The format name in the QR no longer exists in SQL Account (renamed), or an API/credentials problem. |
 | "Document not found" | The document number doesn't exist at that company's SQL Account. |
 | QR won't scan | QR too small / low error correction — enlarge it, set error-correction **M**. |
 | Nothing happens on print | The `OnBeforePrint` event isn't wired to `BarcodeHMACSHA256`. |
+| Blank `c`/`s` in the URL (always "Invalid link") | The `GOLINKLiveDocCheck` quotation is missing, or the `procedure Setup;` dataset query (`plLiveDocCheck`) wasn't added. |
 | Script compile error about a deleted object | You removed `MmHMACSHA256` but left the `MmHMACSHA256.Text := url;` line. |
 
 ---
@@ -317,7 +346,18 @@ end;
 //<-----HMAC-SHA256 end----->
 ```
 
-And the QR builder, wired to `BarcodeHMACSHA256.OnBeforePrint`:
+Inside `procedure Setup;`, load the Company ID + secret from the `GOLINKLiveDocCheck`
+quotation into a dataset:
+
+```pascal
+  SQL := 'SELECT CompanyName As CompanyID, Validity As SigningSecret FROM SL_QT ' +
+         'WHERE DocNo=''GOLINKLiveDocCheck'' ';
+  AddDataSet('plLiveDocCheck', ['CompanyID', 'SigningSecret'])
+  .GetDBData(SQL);
+```
+
+And the QR builder, placed **after** `procedure Setup;` and wired to
+`BarcodeHMACSHA256.OnBeforePrint`:
 
 ```pascal
 procedure BarcodeHMACSHA256OnBeforePrint(Sender: TfrxComponent);
@@ -325,11 +365,11 @@ var
   baseUrl, companyId, docTypeKey, docNo, formatName, secret, payload, sig, url: String;
 begin
   baseUrl    := 'https://print.golink.com.my/v';
-  companyId  := <Profile."Fax1">;            // Company ID  — from Company Profile > Fax 1
-  docTypeKey := 'sales_invoice';             // must match this report's document type
-  formatName := Report.ReportOptions.Name;   // this report's format name (no .fr3 extension)
-  secret     := <Profile."Fax2">;            // signing secret — from Company Profile > Fax 2
-  docNo      := <Main."DocNo">;              // the document number field
+  companyId  := <plLiveDocCheck."CompanyID">;     // from GOLINKLiveDocCheck quotation > Company Name
+  docTypeKey := 'sales_invoice';                  // must match this report's document type
+  formatName := Report.ReportOptions.Name;        // this report's format name (no .fr3 extension)
+  secret     := <plLiveDocCheck."SigningSecret">; // from GOLINKLiveDocCheck quotation > Validity
+  docNo      := <Main."DocNo">;                   // the document number field
 
   // format name is part of the signed payload, so it cannot be tampered with
   payload := companyId + '|' + docTypeKey + '|' + docNo + '|' + formatName;
