@@ -20,6 +20,7 @@ from doc_types import (
     convert_uploaded_templates,
 )
 from sql_api import SQLAccAPIClient, get_field_value
+from verify import generate_verify_secret
 from logger import print_logger
 from config import settings
 
@@ -802,6 +803,45 @@ def page_admin():
 
         companies_container = ui.column().classes('w-full')
 
+        def _copy_secret(value: str):
+            ui.run_javascript(
+                f'navigator.clipboard.writeText({value!r})'
+            )
+            ui.notify('QR verify secret copied to clipboard.', type='positive')
+
+        def _regenerate_secret_confirm(target_company: Company):
+            first_time = not target_company.verify_secret
+            verb = 'Generate' if first_time else 'Regenerate'
+            with ui.dialog() as dlg, ui.card().classes('p-4'):
+                ui.label(f'{verb} QR secret for "{target_company.name}"?') \
+                    .classes('font-bold')
+                if first_time:
+                    ui.label('Creates the signing secret for Live Document Check. After '
+                             'generating, copy it into this company\'s SQL Account report.') \
+                        .classes('text-sm text-gray-500')
+                else:
+                    ui.label('All QR codes already printed for this company will STOP '
+                             'verifying. Only do this if the secret was exposed.') \
+                        .classes('text-sm text-gray-500')
+
+                def _do_regen():
+                    update_company(target_company.id,
+                                   verify_secret=generate_verify_secret())
+                    if first_time:
+                        ui.notify('QR secret generated. Copy it into this company\'s '
+                                  'report.', type='positive')
+                    else:
+                        ui.notify('QR secret regenerated. Update this company\'s report '
+                                  'with the new secret.', type='warning')
+                    dlg.close()
+                    _refresh_companies()
+
+                with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                    ui.button('Cancel', on_click=dlg.close).props(f'flat color={CLR_PRIMARY}')
+                    ui.button(verb, on_click=_do_regen) \
+                        .props(f'outline color={CLR_DANGER if not first_time else CLR_PRIMARY}')
+            dlg.open()
+
         def _refresh_companies():
             companies_container.clear()
             with companies_container:
@@ -810,6 +850,7 @@ def page_admin():
                         with ui.row().classes('w-full items-center justify-between'):
                             with ui.column().classes('gap-0'):
                                 ui.label(c.name).classes('font-bold')
+                                ui.label(f'ID: {c.id}').classes('text-xs text-gray-500 font-mono')
                                 ui.label(f'Host: {c.api_host}').classes('text-xs text-gray-500')
                                 tpl_count = sum(len(v) for v in c.templates.values())
                                 ui.label(f'Templates: {tpl_count}').classes('text-xs text-gray-400')
@@ -818,6 +859,22 @@ def page_admin():
                                     .props(f'flat dense size=sm color={CLR_PRIMARY}')
                                 ui.button(icon='delete', on_click=lambda c=c: _delete_company_confirm(c)) \
                                     .props(f'flat dense size=sm color={CLR_DANGER}')
+                        # QR verification signing secret (paste into this company's report)
+                        with ui.row().classes('w-full items-end gap-2 mt-2'):
+                            if c.verify_secret:
+                                ui.input('QR Verify Secret', value=c.verify_secret) \
+                                    .props('readonly outlined dense') \
+                                    .classes('flex-1 font-mono text-xs')
+                                ui.button(icon='content_copy',
+                                          on_click=lambda v=c.verify_secret: _copy_secret(v)) \
+                                    .props(f'flat dense size=sm color={CLR_PRIMARY}')
+                                ui.button('Regenerate',
+                                          on_click=lambda c=c: _regenerate_secret_confirm(c)) \
+                                    .props(f'flat dense size=sm color={CLR_DANGER}')
+                            else:
+                                ui.button('Generate QR Secret',
+                                          on_click=lambda c=c: _regenerate_secret_confirm(c)) \
+                                    .props(f'outline dense size=sm color={CLR_PRIMARY}')
 
         def _edit_company_dialog(target_company: Company):
             with ui.dialog() as dlg, ui.card().classes('w-96 p-4'):
@@ -910,6 +967,7 @@ def page_admin():
                         api_host=add_co_host.value.strip(),
                         access_key=add_co_ak.value.strip(),
                         secret_key=add_co_sk.value.strip(),
+                        verify_secret=generate_verify_secret(),
                     ))
                     ui.notify(f'Company {add_co_name.value} added.', type='positive')
                     add_co_id.value = ''

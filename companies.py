@@ -21,6 +21,10 @@ class Company:
     secret_key: str
     templates: dict = field(default_factory=dict)
     # templates: {doc_type_key: [{"name": str, "engine": str, "built_in": bool}, ...]}
+    verify_secret: str = ""
+    # verify_secret: per-company HMAC key for public QR verification (see verify.py).
+    # Encrypted at rest like the API keys; the SAME value is embedded in this company's
+    # SQL Account report script. NEVER reuse the API secret_key for this.
 
 
 def load_companies() -> list[Company]:
@@ -35,6 +39,7 @@ def load_companies() -> list[Company]:
     for c in data:
         c["access_key"] = decrypt_value(c.get("access_key", ""))
         c["secret_key"] = decrypt_value(c.get("secret_key", ""))
+        c["verify_secret"] = decrypt_value(c.get("verify_secret", ""))
         companies.append(Company(**c))
     return companies
 
@@ -47,6 +52,7 @@ def save_companies(companies: list[Company]):
         d = asdict(c)
         d["access_key"] = encrypt_value(d["access_key"])
         d["secret_key"] = encrypt_value(d["secret_key"])
+        d["verify_secret"] = encrypt_value(d["verify_secret"])
         data.append(d)
     with _companies_lock:
         with open(path, "w", encoding="utf-8") as f:

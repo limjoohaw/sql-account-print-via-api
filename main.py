@@ -99,15 +99,19 @@ def main():
         # Register all NiceGUI pages
         create_app()
 
+        # Register the public QR verification route (/v) — import side-effect.
+        import public_verify  # noqa: F401
+
         # Add cookie security middleware
         app.add_middleware(CookieSecurityMiddleware)
 
         # Start NiceGUI server
         ui.run(
             title="SQL Account Print",
-            port=8090,       # Fixed port (consol-sync uses 8080)
-            show=True,       # Auto-open browser
-            reload=False,    # No hot-reload in production
+            host=settings.host,   # default 0.0.0.0; override via HOST in .env
+            port=settings.port,   # default 8090; override via PORT in .env
+            show=settings.show,   # auto-open browser; set SHOW=false in production
+            reload=False,         # No hot-reload in production
             favicon=favicon,
             storage_secret=settings.session_secret,
         )

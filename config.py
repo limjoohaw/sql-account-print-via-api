@@ -21,6 +21,9 @@ def _resolve(path: str) -> str:
 class Settings(BaseSettings):
     sqlacc_aws_region: str = "ap-southeast-1"
     session_secret: str = "change-me-to-64-random-hex-chars"
+    port: int = 8090
+    host: str = "0.0.0.0"
+    show: bool = True   # auto-open a browser on start; set SHOW=false in production
     log_dir: str = "./logs"
     doc_types_file: str = "./doc_types.json"
     companies_file: str = "./companies.json"
