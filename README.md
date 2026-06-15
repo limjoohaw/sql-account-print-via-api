@@ -13,6 +13,7 @@ Built with [NiceGUI](https://nicegui.io/) (Python).
 - Per-user login with company access control
 - Report format selection (FR3 / RTM) — upload Report Designer Excel to auto-populate
 - Admin panel for managing companies, users, and templates
+- **Live Document Check** — customers scan a tamper-proof QR on a printed document to view the live PDF and confirm it matches the system (see [docs/live-document-check-guide.md](docs/live-document-check-guide.md))
 - API keys encrypted at rest
 - Login rate limiting and audit logging
 
@@ -92,6 +93,11 @@ DOC_TYPES_FILE=./doc_types.json
 COMPANIES_FILE=./companies.json
 USERS_FILE=./users.json
 DEFAULT_TEMPLATES_FILE=./default_templates.json
+
+# Server binding (optional — defaults shown). For production behind nginx:
+HOST=127.0.0.1
+PORT=8090
+SHOW=false
 ```
 
 ### 4. Create Admin Account
@@ -112,17 +118,12 @@ python main.py
 
 ### 6. Production Settings
 
-Edit `main.py` — change these lines for production:
+No code edits needed — set these in `.env` (see the `HOST`/`PORT`/`SHOW` lines above):
 
-```python
-# Change:
-port=8090,
-show=True,
-
-# To:
-port=8090,
-show=False,
-host='127.0.0.1',
+```
+HOST=127.0.0.1   # only nginx reaches the app
+PORT=8090
+SHOW=false       # don't try to open a browser on a headless server
 ```
 
 ### 7. Set Up systemd Service
@@ -263,6 +264,10 @@ After the server guy completes deployment, you (the app admin) configure everyth
 
 > **Note:** API keys are encrypted before saving to disk. They are never visible to non-admin users.
 
+> **Live Document Check:** each company also gets an auto-generated **QR Verify Secret**,
+> shown (with the Company ID) on its card. Copy both to the client for their report setup —
+> see [Live Document Check](#live-document-check-qr-verification).
+
 ### Step 3 — Upload Report Templates (per company)
 
 1. On the **client's PC**, open SQL Account
@@ -351,6 +356,33 @@ After the server guy completes deployment, you (the app admin) configure everyth
 
 ---
 
+## Live Document Check (QR Verification)
+
+Customers can scan a QR code printed on a SQL Account document to view the **live PDF
+straight from the issuer's SQL Account** and confirm the hardcopy matches the system. If the
+document was cancelled, they see a "cancelled" notice instead.
+
+- **Public endpoint:** `GET /v?c=&k=&n=&t=&s=` — no login required.
+- **Tamper-proof:** the QR carries an HMAC-SHA256 signature over company + doctype + docno +
+  format, so a customer cannot edit the document number to view others' documents (IDOR).
+- **Per-company signing secret** (`verify_secret`), generated in the admin screen and
+  encrypted at rest — **never** the SQL Account API key.
+
+**Admin side:** when you add a company, a `verify_secret` is auto-generated. Open
+**Admin → Company Management** to copy the **Company ID** and **QR Verify Secret** (both
+shown on the company card). Give these to the client to paste into their SQL Account report.
+
+**SQL Account side:** the client embeds a signing script + QR object in their report format.
+Full instructions and a working sample are in:
+- [docs/live-document-check-guide.md](docs/live-document-check-guide.md)
+- [sample-templates/](sample-templates/)
+
+> ⚠️ Once QR codes are printed and distributed, keep the **Company ID, signing secret, and
+> report format name stable** — changing any of them breaks verification for documents
+> already in customers' hands.
+
+---
+
 ## Firewall Note
 
 The VPS must be able to reach each client's SQL Account API service on **port 443** (HTTPS).
@@ -384,18 +416,21 @@ sudo certbot renew
 ## Architecture
 
 ```
-User Browser → HTTPS (nginx) → NiceGUI app (port 8090)
-                                     ↓
-                          SQL Account REST API
-                          (customer's server, port 443)
-                                     ↓
-                              PDF returned to browser
+Staff Browser  ──► HTTPS (nginx) ──► NiceGUI app (login-protected)  ─┐
+                                                                     │
+Customer scans QR ─► HTTPS (nginx) ─► /v public route (signed, no login) ─┤
+                                                                     ▼
+                                                          SQL Account REST API
+                                                          (customer's server, port 443)
+                                                                     ▼
+                                                          PDF returned to browser
 ```
 
 ## Security
 
 - API keys encrypted at rest (Fernet, derived from SESSION_SECRET)
 - API keys never shown to non-admin users
+- Live Document Check links are HMAC-SHA256 signed (tamper-proof, no document enumeration); per-company signing secret encrypted at rest, separate from API keys
 - Login rate-limited (5 attempts/minute)
 - Failed logins audited in log files
 - Sessions use signed cookies (itsdangerous + SameSite=Strict)
